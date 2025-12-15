@@ -261,7 +261,7 @@ while true; do
         3) systemctl start shoes ;;
         4) systemctl stop shoes ;;
         5) systemctl restart shoes ;;
-        6) cat ${SHOES_CONF_FILE} ;;
+        6) cat ${SHOES_LINK_FILE} ;;
         7) journalctl -u shoes -f ;;
         0) exit 0 ;;
         *) echo -e "${RED}无效选项！${RESET}" ;;
