@@ -232,7 +232,7 @@ check_running() { systemctl is-active --quiet shoes; }
 # ======= 菜单 =======
 show_menu() {
     clear
-    echo -e "${GREEN}==== Shoes 管理工具 ====${RESET}"
+    echo -e "${GREEN}=== Shoes 管理工具 ===${RESET}"
 
     echo -e "安装状态: $(check_installed && echo -e "${GREEN}已安装${RESET}" || echo -e "${RED}未安装${RESET}")"
     echo -e "运行状态: $(check_running && echo -e "${GREEN}运行中${RESET}" || echo -e "${RED}未运行${RESET}")"
