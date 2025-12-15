@@ -210,7 +210,6 @@ vless://${UUID}@${HOST_IP}:${PORT}?encryption=none&flow=xtls-rprx-vision&securit
 EOF
 
     echo -e "${GREEN}Shoes 安装完成！${RESET}"
-    echo -e "${YELLOW}你的连接链接：${RESET}"
     cat ${SHOES_LINK_FILE}
 }
 
