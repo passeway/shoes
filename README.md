@@ -6,7 +6,7 @@
 ```
 bash <(curl -fsSL shoes-black-one.vercel.app)
 ```
-## Shoes 优势
+## Shoes — 轻量化、高性能的代理服务框架优势
 
 轻量化：单文件可执行程序，无额外依赖，部署极其简单。
 
@@ -18,3 +18,5 @@ bash <(curl -fsSL shoes-black-one.vercel.app)
 
 稳定可靠：MUSL 静态版本不依赖 glibc，兼容旧系统，不会出现 GLIBC 错误。
 
+Shoes 是一个现代化、高性能的代理服务框架，旨在提供更快、更安全、更易扩展的网络传输体验。
+得益于 Rust 语言的高性能和内存安全性，Shoes 能在极低资源消耗下运行并提供顶级的代理能力。
