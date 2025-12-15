@@ -188,19 +188,13 @@ uninstall_shoes() {
 check_installed() { command -v shoes >/dev/null 2>&1; }
 check_running() { systemctl is-active --quiet shoes; }
 
-# ======= 显示菜单 =======
+# ======= 菜单 =======
 show_menu() {
     clear
     echo -e "${GREEN}====== Shoes 管理工具 ======${RESET}"
 
-    check_shoes_installed
-    installed=$?
-
-    check_shoes_running
-    running=$?
-
-    echo -e "安装状态: $( [[ $installed -eq 0 ]] && echo -e \${GREEN}已安装${RESET}\ || echo -e \${RED}未安装${RESET}\ )"
-    echo -e "运行状态: $( [[ $running -eq 0 ]] && echo -e \${GREEN}运行中${RESET}\ || echo -e \${RED}未运行${RESET}\ )"
+    echo -e "安装状态: $(check_installed && echo -e "${GREEN}已安装${RESET}" || echo -e "${RED}未安装${RESET}")"
+    echo -e "运行状态: $(check_running && echo -e "${GREEN}运行中${RESET}" || echo -e "${RED}未运行${RESET}")"
 
     echo ""
     echo "1. 安装 Shoes 服务"
@@ -211,9 +205,10 @@ show_menu() {
     echo "6. 查看 Shoes 配置"
     echo "7. 查看 Shoes 日志"
     echo "0. 退出"
+    echo -e "${GREEN}=====================${RESET}"
     echo ""
 
-    read -p "请输入编号: " choice
+    read -p "请输入选项: " choice
 }
 
 # ======= 主循环 =======
@@ -225,10 +220,10 @@ while true; do
         3) systemctl start shoes ;;
         4) systemctl stop shoes ;;
         5) systemctl restart shoes ;;
-        6) cat $SHOES_CONF_FILE ;;
+        6) cat ${SHOES_CONF_FILE} ;;
         7) journalctl -u shoes -f ;;
         0) exit 0 ;;
-        *) echo -e "${RED}无效选项${RESET}" ;;
+        *) echo -e "${RED}无效选项！${RESET}" ;;
     esac
     read -p "按 Enter 继续..."
 done
