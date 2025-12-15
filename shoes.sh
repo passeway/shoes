@@ -147,7 +147,11 @@ download_shoes() {
 install_shoes() {
     echo -e "${CYAN}开始安装 Shoes...${RESET}"
 
-    download_and_select_shoes
+    get_glibc_version
+    check_arch
+    get_latest_version
+    download_shoes
+    test_shoes_binary
 
     mkdir -p ${SHOES_CONF_DIR}
 
@@ -159,7 +163,7 @@ install_shoes() {
     PUBLIC_KEY=$(echo "$KEYPAIR" | grep PublicKey | awk '{print $2}')
 
     PORT=$(shuf -i 20000-60000 -n 1)
-    SNI="www.yahoo.com"
+    SNI="www.ua.edu"
 
 cat > ${SHOES_CONF_FILE} <<EOF
 - address: "0.0.0.0:${PORT}"
