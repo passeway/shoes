@@ -1,6 +1,6 @@
 #!/bin/bash
 
-# ======= 颜色变量 =======
+# ======= 颜色代码 =======
 RED='\033[0;31m'
 GREEN='\033[0;32m'
 YELLOW='\033[1;33m'
@@ -19,24 +19,88 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
-# ======= 检查系统架构（amd64 / arm64） =======
+# ======= CPU 架构检测 =======
 check_arch() {
     arch=$(uname -m)
     case "$arch" in
-        x86_64) ARCH_TAG="x86_64-unknown-linux-gnu" ;;
-        aarch64 | arm64) ARCH_TAG="aarch64-unknown-linux-gnu" ;;
+        x86_64)
+            GNU_FILE="shoes-x86_64-unknown-linux-gnu.tar.gz"
+            MUSL_FILE="shoes-x86_64-unknown-linux-musl.tar.gz"
+            ;;
+        aarch64 | arm64)
+            GNU_FILE="shoes-aarch64-unknown-linux-gnu.tar.gz"
+            MUSL_FILE="shoes-aarch64-unknown-linux-musl.tar.gz"
+            ;;
         *)
-            echo -e "${RED}不支持的 CPU 架构：$arch${RESET}"
+            echo -e "${RED}不支持的 CPU 架构: $arch${RESET}"
             exit 1
-        ;;
+            ;;
     esac
 }
 
-# ======= 获取 GitHub 最新版本号 =======
+# ======= 获取 Shoes 最新版本 =======
 get_latest_version() {
-    LATEST_VER=$(curl -s https://api.github.com/repos/cfal/shoes/releases/latest | grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/')
+    LATEST_VER=$(curl -s https://api.github.com/repos/cfal/shoes/releases/latest | \
+        grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/')
     if [[ -z "$LATEST_VER" ]]; then
-        echo -e "${RED}无法获取最新版 Shoes！${RESET}"
+        echo -e "${RED}无法获取 Shoes 最新版本！${RESET}"
+        exit 1
+    fi
+}
+
+# ======= 下载并自动选择 GNU / MUSL 版本 =======
+download_and_select_shoes() {
+    echo -e "${CYAN}开始获取 Shoes 最新版本...${RESET}"
+    get_latest_version
+    check_arch
+
+    echo -e "${GREEN}最新版本: ${YELLOW}v${LATEST_VER}${RESET}"
+    echo -e "${GREEN}CPU 架构: ${YELLOW}$(uname -m)${RESET}"
+
+    mkdir -p /tmp/shoesdl
+    cd /tmp/shoesdl
+
+    # ==== ① 优先下载 GNU 版本 ====
+    echo -e "${CYAN}尝试下载 GNU 版本...${RESET}"
+    GNU_URL="https://github.com/cfal/shoes/releases/download/v${LATEST_VER}/${GNU_FILE}"
+
+    if wget -O shoes.tar.gz "$GNU_URL" 2>/dev/null; then
+        tar -xzf shoes.tar.gz
+        mv shoes ${SHOES_BIN}
+        chmod +x ${SHOES_BIN}
+
+        echo -e "${CYAN}测试 GNU 版本是否能运行...${RESET}"
+
+        if ${SHOES_BIN} --version >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ GNU 版本运行正常（已选择 GNU）${RESET}"
+            return 0
+        fi
+
+        echo -e "${YELLOW}GNU 版本无法运行，自动切换 MUSL 版本...${RESET}"
+    else
+        echo -e "${RED}GNU 下载失败，切换 MUSL...${RESET}"
+    fi
+
+    # ==== ② 下载 MUSL 版本 ====
+    echo -e "${CYAN}开始下载 MUSL 版本...${RESET}"
+    MUSL_URL="https://github.com/cfal/shoes/releases/download/v${LATEST_VER}/${MUSL_FILE}"
+
+    if wget -O shoes.tar.gz "$MUSL_URL"; then
+        tar -xzf shoes.tar.gz
+        mv shoes ${SHOES_BIN}
+        chmod +x ${SHOES_BIN}
+
+        echo -e "${CYAN}测试 MUSL 版本是否能运行...${RESET}"
+
+        if ${SHOES_BIN} --version >/dev/null 2>&1; then
+            echo -e "${GREEN}✓ MUSL 版本运行正常（已选择 MUSL）${RESET}"
+            return 0
+        fi
+
+        echo -e "${RED}MUSL 版本仍无法运行！系统无法支持 Shoes${RESET}"
+        exit 1
+    else
+        echo -e "${RED}MUSL 下载失败！无法安装 Shoes${RESET}"
         exit 1
     fi
 }
@@ -45,39 +109,21 @@ get_latest_version() {
 install_shoes() {
     echo -e "${CYAN}开始安装 Shoes...${RESET}"
 
-    check_arch
-    get_latest_version
+    download_and_select_shoes
 
-    echo -e "${GREEN}检测到架构: ${YELLOW}${ARCH_TAG}${RESET}"
-    echo -e "${GREEN}检测到 Shoes 最新版本: ${YELLOW}${LATEST_VER}${RESET}"
+    mkdir -p ${SHOES_CONF_DIR}
 
-    URL="https://github.com/cfal/shoes/releases/download/v${LATEST_VER}/shoes-${ARCH_TAG}.tar.gz"
-
-    mkdir -p /tmp/shoesdl
-    cd /tmp/shoesdl
-
-    echo -e "${CYAN}下载 Shoes 中...${RESET}"
-    wget -O shoes.tar.gz "$URL"
-
-    echo -e "${CYAN}解压 Shoes...${RESET}"
-    tar -xzf shoes.tar.gz
-    mv shoes /usr/local/bin/
-    chmod +x /usr/local/bin/shoes
-
-    # ======= 生成配置目录 =======
-    mkdir -p $SHOES_CONF_DIR
-
-    # ======= 自动生成参数 =======
+    # 生成 Reality 信息
     UUID=$(cat /proc/sys/kernel/random/uuid)
     SHID=$(openssl rand -hex 8)
-    KEYPAIR=$(shoes generate-reality-keypair)
+    KEYPAIR=$(${SHOES_BIN} generate-reality-keypair)
     PRIVATE_KEY=$(echo "$KEYPAIR" | grep PrivateKey | awk '{print $2}')
     PUBLIC_KEY=$(echo "$KEYPAIR" | grep PublicKey | awk '{print $2}')
 
     PORT=$(shuf -i 20000-60000 -n 1)
-    SNI="www.ua.edu"
+    SNI="www.yahoo.com"
 
-cat > $SHOES_CONF_FILE <<EOF
+cat > ${SHOES_CONF_FILE} <<EOF
 - address: "0.0.0.0:${PORT}"
   protocol:
     type: tls
@@ -94,7 +140,7 @@ cat > $SHOES_CONF_FILE <<EOF
           udp_enabled: true
 EOF
 
-    # ======= systemd 服务 =======
+# ======= 写入 systemd 服务 =======
 cat > /etc/systemd/system/shoes.service <<EOF
 [Unit]
 Description=Shoes Proxy Server
@@ -103,7 +149,7 @@ After=network.target
 [Service]
 Type=simple
 User=root
-ExecStart=/usr/local/bin/shoes /etc/shoes/config.yaml
+ExecStart=${SHOES_BIN} ${SHOES_CONF_FILE}
 Restart=on-failure
 
 [Install]
@@ -114,18 +160,16 @@ EOF
     systemctl enable shoes
     systemctl restart shoes
 
-    # ======= 获取 IP 并生成客户端链接 =======
-    HOST_IP=$(curl -s -4 http://www.cloudflare.com/cdn-cgi/trace | grep "ip" | awk -F= '{print $2}')
+    HOST_IP=$(curl -s -4 http://www.cloudflare.com/cdn-cgi/trace | grep ip | awk -F= '{print $2}')
     COUNTRY=$(curl -s http://ipinfo.io/${HOST_IP}/country)
 
-cat > $SHOES_LINK_FILE <<EOF
-vless://${UUID}@${HOST_IP}:${PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${SNI}&fp=chrome&pbk=${PUBLIC_KEY}&sid=${SHID}&type=tcp#${COUNTRY}
+cat > ${SHOES_LINK_FILE} <<EOF
+vless://${UUID}@${HOST_IP}:${PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${SNI}&fp=random&pbk=${PUBLIC_KEY}&sid=${SHID}&type=tcp#${COUNTRY}
 EOF
 
     echo -e "${GREEN}Shoes 安装完成！${RESET}"
-    echo -e "连接链接：${YELLOW}"
-    cat $SHOES_LINK_FILE
-    echo -e "${RESET}"
+    echo -e "${YELLOW}你的连接链接：${RESET}"
+    cat ${SHOES_LINK_FILE}
 }
 
 # ======= 卸载 Shoes =======
@@ -133,22 +177,16 @@ uninstall_shoes() {
     systemctl stop shoes
     systemctl disable shoes
     rm -f /etc/systemd/system/shoes.service
-    rm -rf $SHOES_CONF_DIR
-    rm -f /usr/local/bin/shoes
-
+    rm -rf ${SHOES_CONF_DIR}
+    rm -f ${SHOES_BIN}
     systemctl daemon-reload
 
-    echo -e "${GREEN}Shoes 已彻底卸载${RESET}"
+    echo -e "${GREEN}Shoes 已卸载${RESET}"
 }
 
-# ======= 状态检查 =======
-check_shoes_installed() {
-    if command -v shoes &>/dev/null; then return 0; else return 1; fi
-}
-
-check_shoes_running() {
-    if systemctl is-active --quiet shoes; then return 0; else return 1; fi
-}
+# ======= 状态检测 =======
+check_installed() { command -v shoes >/dev/null 2>&1; }
+check_running() { systemctl is-active --quiet shoes; }
 
 # ======= 显示菜单 =======
 show_menu() {
@@ -161,8 +199,8 @@ show_menu() {
     check_shoes_running
     running=$?
 
-    echo -e "安装状态: $( [[ $installed -eq 0 ]] && echo -e \"${GREEN}已安装${RESET}\" || echo -e \"${RED}未安装${RESET}\" )"
-    echo -e "运行状态: $( [[ $running -eq 0 ]] && echo -e \"${GREEN}运行中${RESET}\" || echo -e \"${RED}未运行${RESET}\" )"
+    echo -e "安装状态: $( [[ $installed -eq 0 ]] && echo -e \${GREEN}已安装${RESET}\ || echo -e \${RED}未安装${RESET}\ )"
+    echo -e "运行状态: $( [[ $running -eq 0 ]] && echo -e \${GREEN}运行中${RESET}\ || echo -e \${RED}未运行${RESET}\ )"
 
     echo ""
     echo "1. 安装 Shoes 服务"
