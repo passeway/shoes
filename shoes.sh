@@ -158,7 +158,7 @@ install_shoes() {
     # 生成 Reality 信息
     UUID=$(cat /proc/sys/kernel/random/uuid)
     SHID=$(openssl rand -hex 8)
-    KEYPAIR=$(${SHOES_BIN} generate-reality-keypair)
+    KEYPAIR=$(shoes generate-reality-keypair)
     PRIVATE_KEY=$(echo "$KEYPAIR" | grep PrivateKey | awk '{print $2}')
     PUBLIC_KEY=$(echo "$KEYPAIR" | grep PublicKey | awk '{print $2}')
 
