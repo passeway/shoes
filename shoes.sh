@@ -19,6 +19,16 @@ if [[ $EUID -ne 0 ]]; then
     exit 1
 fi
 
+# ======= 获取 glibc 版本 =======
+get_glibc_version() {
+    GLIBC_VERSION=$(ldd --version | head -n1 | awk '{print $NF}')
+    echo -e "${GREEN}系统 glibc 版本：${YELLOW}${GLIBC_VERSION}${RESET}"
+
+    # glibc 数字部分提取
+    GLIBC_MAJOR=$(echo "$GLIBC_VERSION" | cut -d. -f1)
+    GLIBC_MINOR=$(echo "$GLIBC_VERSION" | cut -d. -f2)
+}
+
 # ======= CPU 架构检测 =======
 check_arch() {
     arch=$(uname -m)
@@ -27,7 +37,7 @@ check_arch() {
             GNU_FILE="shoes-x86_64-unknown-linux-gnu.tar.gz"
             MUSL_FILE="shoes-x86_64-unknown-linux-musl.tar.gz"
             ;;
-        aarch64 | arm64)
+        aarch64|arm64)
             GNU_FILE="shoes-aarch64-unknown-linux-gnu.tar.gz"
             MUSL_FILE="shoes-aarch64-unknown-linux-musl.tar.gz"
             ;;
@@ -38,7 +48,7 @@ check_arch() {
     esac
 }
 
-# ======= 获取 Shoes 最新版本 =======
+# ======= 获取最新 Shoes 版本 =======
 get_latest_version() {
     LATEST_VER=$(curl -s https://api.github.com/repos/cfal/shoes/releases/latest | \
         grep '"tag_name":' | sed -E 's/.*"v?([^"]+)".*/\1/')
@@ -48,62 +58,90 @@ get_latest_version() {
     fi
 }
 
-# ======= 下载并自动选择 GNU / MUSL 版本 =======
-download_and_select_shoes() {
-    echo -e "${CYAN}开始获取 Shoes 最新版本...${RESET}"
-    get_latest_version
-    check_arch
+# ======= 测试 Shoes 是否可运行（不使用 --version） =======
+test_shoes_binary() {
+    if ${SHOES_BIN} generate-reality-keypair >/dev/null 2>&1; then
+        return 0
+    else
+        return 1
+    fi
+}
 
-    echo -e "${GREEN}最新版本: ${YELLOW}v${LATEST_VER}${RESET}"
-    echo -e "${GREEN}CPU 架构: ${YELLOW}$(uname -m)${RESET}"
+# ======= 自动选择 GNU/MUSL 并下载 =======
+download_shoes() {
+    get_glibc_version
+    check_arch
+    get_latest_version
+
+    echo -e "${GREEN}Shoes 最新版本：${YELLOW}v${LATEST_VER}${RESET}"
+
+    # 判断 glibc 是否小于 2.38
+    if (( GLIBC_MAJOR < 2 )) || (( GLIBC_MAJOR == 2 && GLIBC_MINOR < 38 )); then
+        echo -e "${YELLOW}你的 glibc 版本低于 2.38，无法运行 GNU 版本！${RESET}"
+        echo -e "${CYAN}将直接下载 MUSL 静态版本…${RESET}"
+
+        DOWNLOAD_FILE=${MUSL_FILE}
+        DOWNLOAD_TYPE="MUSL"
+    else
+        echo -e "${GREEN}你的系统支持 Shoes GNU 版本，将优先尝试 GNU…${RESET}"
+
+        DOWNLOAD_FILE=${GNU_FILE}
+        DOWNLOAD_TYPE="GNU"
+    fi
 
     mkdir -p /tmp/shoesdl
     cd /tmp/shoesdl
 
-    # ==== ① 优先下载 GNU 版本 ====
-    echo -e "${CYAN}尝试下载 GNU 版本...${RESET}"
-    GNU_URL="https://github.com/cfal/shoes/releases/download/v${LATEST_VER}/${GNU_FILE}"
+    DOWNLOAD_URL="https://github.com/cfal/shoes/releases/download/v${LATEST_VER}/${DOWNLOAD_FILE}"
 
-    if wget -O shoes.tar.gz "$GNU_URL" 2>/dev/null; then
-        tar -xzf shoes.tar.gz
-        mv shoes ${SHOES_BIN}
-        chmod +x ${SHOES_BIN}
+    echo -e "${CYAN}下载 ${DOWNLOAD_TYPE} 版本: ${YELLOW}${DOWNLOAD_URL}${RESET}"
+    wget -O shoes.tar.gz "$DOWNLOAD_URL" || {
+        echo -e "${RED}${DOWNLOAD_TYPE} 下载失败！${RESET}"
 
-        echo -e "${CYAN}测试 GNU 版本是否能运行...${RESET}"
-
-        if ${SHOES_BIN} --version >/dev/null 2>&1; then
-            echo -e "${GREEN}✓ GNU 版本运行正常（已选择 GNU）${RESET}"
-            return 0
+        # GNU 失败 → 尝试 MUSL
+        if [[ "$DOWNLOAD_TYPE" == "GNU" ]]; then
+            echo -e "${YELLOW}尝试改为下载 MUSL 版本...${RESET}"
+            DOWNLOAD_URL="https://github.com/cfal/shoes/releases/download/v${LATEST_VER}/${MUSL_FILE}"
+            wget -O shoes.tar.gz "$DOWNLOAD_URL" || {
+                echo -e "${RED}MUSL 版本也无法下载，安装失败！${RESET}"
+                exit 1
+            }
+        else
+            exit 1
         fi
+    }
 
-        echo -e "${YELLOW}GNU 版本无法运行，自动切换 MUSL 版本...${RESET}"
+    tar -xzf shoes.tar.gz
+    mv shoes ${SHOES_BIN}
+    chmod +x ${SHOES_BIN}
+
+    # 测试运行
+    if test_shoes_binary; then
+        echo -e "${GREEN}Shoes (${DOWNLOAD_TYPE}) 可正常运行！${RESET}"
     else
-        echo -e "${RED}GNU 下载失败，切换 MUSL...${RESET}"
-    fi
+        # GNU 失败 → fallback
+        if [[ "$DOWNLOAD_TYPE" == "GNU" ]]; then
+            echo -e "${YELLOW}GNU 无法运行，自动切换 MUSL…${RESET}"
 
-    # ==== ② 下载 MUSL 版本 ====
-    echo -e "${CYAN}开始下载 MUSL 版本...${RESET}"
-    MUSL_URL="https://github.com/cfal/shoes/releases/download/v${LATEST_VER}/${MUSL_FILE}"
+            DOWNLOAD_URL="https://github.com/cfal/shoes/releases/download/v${LATEST_VER}/${MUSL_FILE}"
+            wget -O shoes.tar.gz "$DOWNLOAD_URL"
+            tar -xzf shoes.tar.gz
+            mv shoes ${SHOES_BIN}
+            chmod +x ${SHOES_BIN}
 
-    if wget -O shoes.tar.gz "$MUSL_URL"; then
-        tar -xzf shoes.tar.gz
-        mv shoes ${SHOES_BIN}
-        chmod +x ${SHOES_BIN}
-
-        echo -e "${CYAN}测试 MUSL 版本是否能运行...${RESET}"
-
-        if ${SHOES_BIN} --version >/dev/null 2>&1; then
-            echo -e "${GREEN}✓ MUSL 版本运行正常（已选择 MUSL）${RESET}"
-            return 0
+            if test_shoes_binary; then
+                echo -e "${GREEN}MUSL 版本运行成功！${RESET}"
+            else
+                echo -e "${RED}MUSL 版本也无法运行，系统无法支持 Shoes！${RESET}"
+                exit 1
+            fi
+        else
+            echo -e "${RED}MUSL 版本无法运行，系统不支持 Shoes！${RESET}"
+            exit 1
         fi
-
-        echo -e "${RED}MUSL 版本仍无法运行！系统无法支持 Shoes${RESET}"
-        exit 1
-    else
-        echo -e "${RED}MUSL 下载失败！无法安装 Shoes${RESET}"
-        exit 1
     fi
 }
+
 
 # ======= 安装 Shoes =======
 install_shoes() {
