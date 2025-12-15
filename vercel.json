@@ -1,0 +1,9 @@
+{
+  "redirects": [
+    {
+      "source": "/",
+      "destination": "https://raw.githubusercontent.com/passeway/shoes/refs/heads/main/shoes.sh",
+      "permanent": true
+    }
+  ]
+}
