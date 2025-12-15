@@ -159,8 +159,8 @@ install_shoes() {
     UUID=$(cat /proc/sys/kernel/random/uuid)
     SHID=$(openssl rand -hex 8)
     KEYPAIR=$(shoes generate-reality-keypair)
-    PRIVATE_KEY=$(echo "$KEYPAIR" | grep PrivateKey | awk '{print $2}')
-    PUBLIC_KEY=$(echo "$KEYPAIR" | grep PublicKey | awk '{print $2}')
+    PRIVATE_KEY=$(echo "$KEYPAIR" | grep private | awk '{print $2}')
+    PUBLIC_KEY=$(echo "$KEYPAIR" | grep public | awk '{print $2}')
 
     PORT=$(shuf -i 20000-60000 -n 1)
     SNI="www.ua.edu"
