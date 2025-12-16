@@ -29,7 +29,7 @@ get_glibc_version() {
     GLIBC_VERSION=$(ldd --version | head -n1 | awk '{print $NF}')
     GLIBC_MAJOR=$(echo "$GLIBC_VERSION" | cut -d. -f1)
     GLIBC_MINOR=$(echo "$GLIBC_VERSION" | cut -d. -f2)
-    echo -e "${GREEN}系统 glibc 版本：${YELLOW}${GLIBC_VERSION}${RESET}"
+    echo -e "${GREEN}系统 glibc版本：${YELLOW}${GLIBC_VERSION}${RESET}"
 }
 
 # ================== 架构检测 ==================
