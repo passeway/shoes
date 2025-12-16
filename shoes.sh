@@ -104,7 +104,7 @@ download_shoes() {
     chmod +x "${SHOES_BIN}"
 
     if test_shoes_binary; then
-        echo -e "${GREEN}Shoes (${DOWNLOAD_TYPE}) 可正常运行${RESET}"
+        echo -e "${GREEN}Shoes (${DOWNLOAD_TYPE}) 正常运行${RESET}"
         return
     fi
 
@@ -116,7 +116,7 @@ download_shoes() {
         mv shoes "${SHOES_BIN}"
         chmod +x "${SHOES_BIN}"
         test_shoes_binary || {
-            echo -e "${RED}MUSL 也无法运行${RESET}"
+            echo -e "${RED}MUSL 无法运行${RESET}"
             exit 1
         }
     else
@@ -127,7 +127,7 @@ download_shoes() {
 
 # ================== 安装 ==================
 install_shoes() {
-    echo -e "${CYAN}开始安装 Shoes...${RESET}"
+    echo -e "${CYAN}开始安装 Shoes${RESET}"
     download_shoes
     mkdir -p "${SHOES_CONF_DIR}"
 
