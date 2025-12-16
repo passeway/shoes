@@ -87,7 +87,7 @@ download_shoes() {
     cd "${TMP_DIR}" || exit 1
 
     DOWNLOAD_URL="https://github.com/cfal/shoes/releases/download/v${LATEST_VER}/${DOWNLOAD_FILE}"
-    echo -e "${GREEN}下载 ${DOWNLOAD_TYPE}: ${YELLOW}${DOWNLOAD_URL}${RESET}"
+    echo -e "${GREEN}下载 ${DOWNLOAD_TYPE}: ${GREEN}${DOWNLOAD_URL}${RESET}"
 
     wget -O shoes.tar.gz "$DOWNLOAD_URL" || {
         if [[ "$DOWNLOAD_TYPE" == "GNU" ]]; then
