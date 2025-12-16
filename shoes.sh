@@ -146,13 +146,7 @@ download_shoes() {
 # ======= 安装 Shoes =======
 install_shoes() {
     echo -e "${CYAN}开始安装 Shoes...${RESET}"
-
-    get_glibc_version
-    check_arch
-    get_latest_version
     download_shoes
-    test_shoes_binary
-
     mkdir -p ${SHOES_CONF_DIR}
 
     # 生成 Reality 信息
