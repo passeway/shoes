@@ -74,7 +74,7 @@ download_shoes() {
     get_latest_version
 
     if (( GLIBC_MAJOR < 2 )) || (( GLIBC_MAJOR == 2 && GLIBC_MINOR < 38 )); then
-        echo -e "${YELLOW}glibc < 2.38，使用 MUSL 版本${RESET}"
+        echo -e "${GREEN}glibc < 2.38，使用 MUSL 版本${RESET}"
         DOWNLOAD_FILE="${MUSL_FILE}"
         DOWNLOAD_TYPE="MUSL"
     else
@@ -87,7 +87,7 @@ download_shoes() {
     cd "${TMP_DIR}" || exit 1
 
     DOWNLOAD_URL="https://github.com/cfal/shoes/releases/download/v${LATEST_VER}/${DOWNLOAD_FILE}"
-    echo -e "${CYAN}下载 ${DOWNLOAD_TYPE}: ${YELLOW}${DOWNLOAD_URL}${RESET}"
+    echo -e "${GREEN}下载 ${DOWNLOAD_TYPE}: ${YELLOW}${DOWNLOAD_URL}${RESET}"
 
     wget -O shoes.tar.gz "$DOWNLOAD_URL" || {
         if [[ "$DOWNLOAD_TYPE" == "GNU" ]]; then
@@ -127,7 +127,7 @@ download_shoes() {
 
 # ================== 安装 ==================
 install_shoes() {
-    echo -e "${CYAN}开始安装 Shoes${RESET}"
+    echo -e "${GREEN}开始安装 Shoes${RESET}"
     download_shoes
     mkdir -p "${SHOES_CONF_DIR}"
 
