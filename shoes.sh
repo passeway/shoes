@@ -104,7 +104,7 @@ download_shoes() {
     chmod +x "${SHOES_BIN}"
 
     if test_shoes_binary; then
-        echo -e "${GREEN}Shoes (${DOWNLOAD_TYPE}) 正常运行${RESET}"
+        echo -e "${GREEN}(${DOWNLOAD_TYPE}) 正常运行${RESET}"
         return
     fi
 
