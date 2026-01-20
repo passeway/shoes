@@ -126,16 +126,17 @@ download_shoes() {
 }
 
 # 生成未被占用的端口
-generate_unused_port() {
-    local port
-    while true; do
-        port=$(shuf -i 1025-65535 -n 1)
-        if is_port_available $port; then
-            echo $port
-            return
-        fi
-    done
+is_port_available() {
+    local port="$1"
+
+    if command -v ss >/dev/null 2>&1; then
+        ! ss -lntup | awk '{print $5}' | grep -qE "[:.]${port}$"
+    else
+        ! netstat -lntup 2>/dev/null | awk '{print $4}' | grep -qE "[:.]${port}$"
+    fi
 }
+
+
 # ================== 安装 ==================
 install_shoes() {
     echo -e "${GREEN}开始安装 Shoes${RESET}"
@@ -144,8 +145,8 @@ install_shoes() {
 
     SNI="www.ua.edu"
     SHID=$(openssl rand -hex 8)
-    VLESS_PORT=$(generate_unused_port)
-    ANYTLS_PORT=$(generate_unused_port)
+    VLESS_PORT=$(is_port_available)
+    ANYTLS_PORT=$(is_port_available)
     UUID=$(cat /proc/sys/kernel/random/uuid)
     KEYPAIR=$(shoes generate-reality-keypair)
     PRIVATE_KEY=$(echo "$KEYPAIR" | grep "private key" | awk '{print $4}')
