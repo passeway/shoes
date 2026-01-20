@@ -200,8 +200,8 @@ WantedBy=multi-user.target
 EOF
 
     systemctl daemon-reload
-    systemctl enable shoes
-    systemctl restart shoes
+    systemctl enable --now shoes
+    systemctl status shoes --no-pager
 
     HOST_IP=$(curl -s -4 http://www.cloudflare.com/cdn-cgi/trace | grep ip | awk -F= '{print $2}')
     COUNTRY=$(curl -s http://ipinfo.io/${HOST_IP}/country)
