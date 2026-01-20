@@ -174,8 +174,8 @@ install_shoes() {
     type: tls
     tls_targets:
       "www.bing.com":
-        cert: "cert.pem"
-        key: "key.pem"
+        cert: "/etc/shoes/cert.pem"
+        key: "/etc/shoes/key.pem"
         protocol:
           type: anytls
           users:
