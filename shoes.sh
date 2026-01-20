@@ -125,6 +125,17 @@ download_shoes() {
     fi
 }
 
+# 生成未被占用的端口
+generate_unused_port() {
+    local port
+    while true; do
+        port=$(shuf -i 1025-65535 -n 1)
+        if is_port_available $port; then
+            echo $port
+            return
+        fi
+    done
+}
 # ================== 安装 ==================
 install_shoes() {
     echo -e "${GREEN}开始安装 Shoes${RESET}"
@@ -133,17 +144,29 @@ install_shoes() {
 
     SNI="www.ua.edu"
     SHID=$(openssl rand -hex 8)
-    PORT=$(shuf -i 20000-60000 -n 1)
+    VLESS_PORT=$(generate_unused_port)
+    ANYTLS_PORT=$(generate_unused_port)
     UUID=$(cat /proc/sys/kernel/random/uuid)
     KEYPAIR=$(shoes generate-reality-keypair)
     PRIVATE_KEY=$(echo "$KEYPAIR" | grep "private key" | awk '{print $4}')
     PUBLIC_KEY=$(echo "$KEYPAIR" | grep "public key" | awk '{print $4}')
 
 
+    # 生成自签名证书
+    openssl ecparam -genkey -name prime256v1 -out "${SHOES_CONF_DIR}/key.pem" || {
+        echo -e "${RED}生成私钥失败${RESET}"
+        exit 1
+    }
+    openssl req -new -x509 -days 3650 -key "${SHOES_CONF_DIR}/key.pem" -out "${SHOES_CONF_DIR}/cert.pem" -subj "/CN=bing.com" || {
+        echo -e "${RED}生成证书失败${RESET}"
+        exit 1
+    }
+
+
     
 
     cat > "${SHOES_CONF_FILE}" <<EOF
-- address: "0.0.0.0:${PORT}"
+- address: "0.0.0.0:${VLESS_PORT}"
   protocol:
     type: tls
     reality_targets:
@@ -155,6 +178,19 @@ install_shoes() {
         protocol:
           type: vless
           user_id: "${UUID}"
+          udp_enabled: true
+- address: "0.0.0.0:${ANYTLS_PORT}"
+  protocol:
+    type: tls
+    tls_targets:
+      "www.bing.com":
+        cert: "cert.pem"
+        key: "key.pem"
+        protocol:
+          type: anytls
+          users:
+            - name: anylts
+              password: "${PUBLIC_KEY}"
           udp_enabled: true
 EOF
 
@@ -181,7 +217,8 @@ EOF
     COUNTRY=$(curl -s http://ipinfo.io/${HOST_IP}/country)
 
     cat > "${SHOES_LINK_FILE}" <<EOF
-vless://${UUID}@${HOST_IP}:${PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${SNI}&fp=random&pbk=${PUBLIC_KEY}&sid=${SHID}&type=tcp#${COUNTRY}
+vless://${UUID}@${HOST_IP}:${VLESS_PORT}?encryption=none&flow=xtls-rprx-vision&security=reality&sni=${SNI}&fp=random&pbk=${PUBLIC_KEY}&sid=${SHID}&type=tcp#${COUNTRY}
+anytls://${PUBLIC_KEY}@${HOST_IP}:${ANYTLS_PORT}?security=tls&sni=www.bing.com&allowInsecure=1&type=tcp#${COUNTRY}
 EOF
 
     echo -e "${GREEN}Shoes 安装完成！${RESET}"
