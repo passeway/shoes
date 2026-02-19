@@ -1,8 +1,8 @@
-## 终端预览
+## 终端就不预览了
+## 算了还是随便看下把
+<img width="675" height="461" alt="B794BE706CD698CA3754A674397CE509" src="https://github.com/user-attachments/assets/828d1b7e-a8dd-4f3c-9720-02d0778f9de8" />
 
-![preview](image.png)
-
-## 一键脚本
+## 一键脚本 可以自定义端口 其他都缺省 自用
 ```
 bash <(curl -fsSL shoes-black-one.vercel.app)
 ```
