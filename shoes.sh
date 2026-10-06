@@ -457,6 +457,7 @@ show_menu() {
     [[ ! -t 1 ]] || clear 2>/dev/null || :
     if [[ -x "$SHOES_BIN" ]] && command -v timeout >/dev/null 2>&1; then
         version=$(timeout 3 "$SHOES_BIN" --version 2>/dev/null) || version='未知'
+        version=${version#shoes }
     fi
     printf '=== Shoes 管理工具 ===\n'
     printf '安装状态: %s\n' "$(check_installed && echo 已安装 || echo 未安装)"
