@@ -114,7 +114,8 @@ download_shoes() {
         [[ "$member" != *$'\n'* ]] || continue
         CANDIDATE="$WORK_DIR/shoes.$flavor"
         tar -xOzf "$archive" "$member" > "$CANDIDATE" || continue
-        [[ -s "$CANDIDATE" ]] && chmod 755 "$CANDIDATE" || continue
+        [[ -s "$CANDIDATE" ]] || continue
+        chmod 755 "$CANDIDATE" || continue
         version=$(timeout 15 "$CANDIDATE" --version 2>/dev/null) || continue
         [[ "$version" == "shoes ${RELEASE_TAG#v}" ]] || continue
         timeout 15 "$CANDIDATE" generate-reality-keypair >/dev/null 2>&1 || continue
