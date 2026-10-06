@@ -2,16 +2,52 @@
 
 # Shoes
 
-**轻量部署 · 三协议接入 · 简洁管理**
+**Rust 驱动 · 多协议共用内核 · 灵活转发**
 
-基于 [cfal/shoes](https://github.com/cfal/shoes) 的 Linux 服务管理脚本。\
-一键部署 VLESS Reality Vision、AnyTLS 与 Shadowsocks 2022，让安装、更新和日常维护更直接。
+[Shoes](https://github.com/cfal/shoes) 是使用 **Rust** 编写的高性能多协议代理内核。\
+一个服务承载多种接入方式，结合灵活的路由与配置热重载，让部署和管理更集中。
 
 ![Linux](https://img.shields.io/badge/Linux-Debian%20%7C%20Ubuntu%20%7C%20Alpine-2563eb?style=flat-square)
 ![Architecture](https://img.shields.io/badge/架构-x86__64%20%7C%20ARM64-0f766e?style=flat-square)
 ![Protocols](https://img.shields.io/badge/协议-VLESS%20%7C%20AnyTLS%20%7C%20SS2022-7c3aed?style=flat-square)
 
 </div>
+
+## 为什么选择 Shoes
+
+### 一个内核，三种接入
+
+**VLESS Reality Vision、AnyTLS、Shadowsocks 2022 可以在同一个 Shoes 进程中运行。** 每个节点使用独立端口，共用一套内核、日志和服务管理，方便按客户端与使用场景选择协议。
+
+### Rust 实现，关注传输效率
+
+Shoes 使用 Rust 构建原生可执行程序，将性能与内存安全作为实现基础。支持 **Reality + XTLS Vision**；Vision 可在识别到符合条件的 TLS 流量后进入直通模式，优化 TLS 套 TLS 场景的传输路径。
+
+### 配置热重载，调整更方便
+
+内核默认监听配置变化并重新加载，支持将多个配置一起载入。调整规则或维护多个接入配置时，可减少手动重启操作。
+
+### 路由与转发，按需扩展
+
+| 内核能力 | 可以做什么 |
+| --- | --- |
+| IP / CIDR / 域名规则 | 根据目标地址选择放行或转发方式 |
+| TLS SNI 分流 | 根据客户端请求的域名匹配服务配置 |
+| 上游代理链与负载均衡 | 按需构建多级转发，并分配上游连接 |
+| TCP / QUIC 传输 | 为合适的协议与部署场景选择传输方式 |
+
+以上是 Shoes 内核可按需配置的能力。本仓库默认提供三个接入节点，更多组合方式可查阅[上游配置文档](https://github.com/cfal/shoes/blob/v0.3.2/CONFIG.md)。
+
+### GNU / MUSL，兼顾不同 Linux 环境
+
+Shoes 提供 GNU 与 MUSL 预编译内核。脚本根据系统选择可运行的版本，覆盖 **Debian、Ubuntu、Alpine**，支持 **x86_64 与 ARM64**，方便在不同 VPS 上部署。
+
+## 本项目让部署更简单
+
+- **一键安装三个协议**：自动处理依赖、密钥与端口，安装后直接输出分享链接。
+- **集中管理服务**：菜单完成启停、重启、日志查看与内核更新。
+- **保留已有节点**：更新保留端口、凭据和启停状态；重复安装可补齐 SS2022。
+- **检查后再替换**：下载摘要可用时进行校验，新内核通过运行与配置检查后再替换；启动失败会显示日志。
 
 ## 快速开始
 
@@ -50,8 +86,6 @@ Shadowsocks 分享链接采用 [SIP002](https://shadowsocks.org/doc/sip002.html)
 
 需要正常运行对应服务管理器的 Linux 环境。脚本自动安装所需依赖；Debian / Ubuntu 优先尝试 GNU 内核，不兼容时使用 MUSL，Alpine 使用 MUSL。
 
-本脚本默认部署上表中的三个协议，Shoes 内核的更多能力可查阅[上游文档](https://github.com/cfal/shoes#readme)。
-
 ## 日常管理
 
 | 选项 | 功能 |
@@ -59,12 +93,10 @@ Shadowsocks 分享链接采用 [SIP002](https://shadowsocks.org/doc/sip002.html)
 | `1` | 安装三个协议；已有安装自动补齐 SS2022-128，保留原有端口和凭据 |
 | `2` | 确认后卸载服务 |
 | `3` / `4` / `5` | 启动 / 停止 / 重启 |
-| `6` | 查看分享链接，并修正旧 AnyTLS 链接参数 |
+| `6` | 查看全部分享链接 |
 | `7` | 查看日志，按 `Ctrl+C` 返回菜单 |
 | `8` | 更新内核，保留现有配置及服务启停状态 |
 | `0` | 退出 |
-
-更新前会检查下载文件、内核运行能力及现有配置。已运行的服务在更新后重启；原本停止的服务继续保持停止。启动失败时会显示日志，便于定位问题。
 
 已有安装重新运行脚本后，选择 `1` 补齐 SS2022-128，再选择 `6` 查看全部分享链接。再次执行安装会保留已有 SS 端口和密钥。
 
