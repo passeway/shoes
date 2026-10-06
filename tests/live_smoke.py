@@ -160,7 +160,7 @@ jq -n --arg bin "$CANDIDATE" --arg pub "$PUBLIC_KEY" --arg sid "$SHID" --arg uui
                 config = [{'address': f'127.0.0.1:{socks_port}', 'protocol': {'type': 'socks'},
                            'rules': [{'masks': '0.0.0.0/0', 'action': 'allow', 'client_chain': {
                                'address': f'127.0.0.1:{p[kind]}', 'protocol': protocol}}]}]
-                client_file = d / (kind + '.json')
+                client_file = d / (kind + '-client.json')
                 client_file.write_text(json.dumps(config))  # JSON is valid YAML.
                 subprocess.run([binary, '--dry-run', str(client_file)], check=True, timeout=15)
                 client = start(kind, client_file)
