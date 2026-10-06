@@ -106,10 +106,9 @@ curl(){
 download_shoes
 generate_credentials
 write_config "$WORK_DIR/server.yaml" "$WORK_DIR"
-write_ss2022_config "$WORK_DIR/ss2022.json"
 HOST_IP=127.0.0.1; COUNTRY=TEST
 write_ss2022_link "$WORK_DIR/ss2022.txt"
-validate_config "$CANDIDATE" "$WORK_DIR/server.yaml" "$WORK_DIR/ss2022.json"
+validate_config "$CANDIDATE" "$WORK_DIR/server.yaml"
 jq -n --arg bin "$CANDIDATE" --arg pub "$PUBLIC_KEY" --arg sid "$SHID" --arg uuid "$UUID" \
   --arg sni "$SNI" --argjson vless "$VLESS_PORT" --argjson anytls "$ANYTLS_PORT" --argjson ss2022 "$SS2022_PORT" \
   '{bin:$bin,pub:$pub,sid:$sid,uuid:$uuid,sni:$sni,vless:$vless,anytls:$anytls,ss2022:$ss2022}' > "$WORK_DIR/params.json"
@@ -140,7 +139,7 @@ jq -n --arg bin "$CANDIDATE" --arg pub "$PUBLIC_KEY" --arg sid "$SHID" --arg uui
             return proc
 
         try:
-            server = start('server', [d / 'server.yaml', d / 'ss2022.json'])
+            server = start('server', d / 'server.yaml')
             for kind in ('anytls', 'vless', 'ss2022'):
                 wait_port(p[kind], server)
                 socks_port = free_port()
