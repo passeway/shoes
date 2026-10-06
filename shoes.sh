@@ -5,7 +5,6 @@ SHOES_BIN="/usr/local/bin/shoes"
 SHOES_CONF_DIR="/etc/shoes"
 SHOES_CONF_FILE="${SHOES_CONF_DIR}/config.yaml"
 SHOES_LINK_FILE="${SHOES_CONF_DIR}/config.txt"
-SS2022_CONF_FILE="${SHOES_CONF_DIR}/ss2022.json"
 SS2022_LINK_FILE="${SHOES_CONF_DIR}/ss2022.txt"
 SS2022_METHOD="2022-blake3-aes-128-gcm"
 SYSTEMD_FILE="/etc/systemd/system/shoes.service"
@@ -139,14 +138,8 @@ validate_config() {
     fi
 }
 
-service_config_files() {
-    SHOES_CONFIGS=("$SHOES_CONF_FILE")
-    [[ ! -e "$SS2022_CONF_FILE" ]] || SHOES_CONFIGS+=("$SS2022_CONF_FILE")
-}
-
 validate_service_config() {
-    service_config_files
-    validate_config "$1" "${SHOES_CONFIGS[@]}"
+    validate_config "$1" "$SHOES_CONF_FILE"
 }
 
 choose_port() {
@@ -216,13 +209,6 @@ generate_ss2022_credentials() {
     [[ "$SS2022_PASSWORD" =~ ^[A-Za-z0-9+/]{22}==$ ]] || { error '生成 SS2022 密钥失败。'; return 1; }
 }
 
-write_ss2022_config() {
-    # JSON is also valid YAML, and allows reading the existing key without shell parsing.
-    jq -n --arg address "0.0.0.0:$SS2022_PORT" --arg method "$SS2022_METHOD" \
-        --arg password "$SS2022_PASSWORD" \
-        '[{address:$address, protocol:{type:"shadowsocks", cipher:$method, password:$password, udp_enabled:true}}]' > "$1"
-}
-
 write_ss2022_link() {
     local encoded_password
     encoded_password=$(printf '%s' "$SS2022_PASSWORD" | jq -sRr @uri) || return 1
@@ -230,14 +216,6 @@ write_ss2022_link() {
     printf 'ss://%s:%s@%s:%s#%s-ss2022-128\n' \
         "$SS2022_METHOD" "$encoded_password" "$HOST_IP" "$SS2022_PORT" "$COUNTRY" > "$1"
 }
-
-atomic_private_file() (
-    local staged destination="$2"
-    umask 077
-    staged=$(mktemp "${destination%/*}/.ss2022.XXXXXX") || return 1
-    trap 'rm -f -- "$staged"' EXIT
-    install -m 600 "$1" "$staged" && mv -f "$staged" "$destination"
-)
 
 write_config() {
     local destination="$1" cert_dir="$2"
@@ -268,6 +246,12 @@ write_config() {
             - name: anytls
               password: "${PUBLIC_KEY}"
           udp_enabled: true
+- address: "0.0.0.0:${SS2022_PORT}"
+  protocol:
+    type: shadowsocks
+    cipher: "${SS2022_METHOD}"
+    password: "${SS2022_PASSWORD}"
+    udp_enabled: true
 EOF
 }
 
@@ -282,7 +266,7 @@ secure_config() {
     local file
     [[ -d "$SHOES_CONF_DIR" ]] || return 0
     chmod 700 "$SHOES_CONF_DIR" || return 1
-    for file in "$SHOES_CONF_FILE" "$SHOES_LINK_FILE" "$SS2022_CONF_FILE" "$SS2022_LINK_FILE" \
+    for file in "$SHOES_CONF_FILE" "$SHOES_LINK_FILE" "$SS2022_LINK_FILE" \
         "$SHOES_CONF_DIR/key.pem" "$SHOES_CONF_DIR/cert.pem"; do
         [[ ! -f "$file" ]] || chmod 600 "$file" || return 1
     done
@@ -299,9 +283,7 @@ repair_links() (
 )
 
 install_service() {
-    local config_args
-    service_config_files
-    config_args="${SHOES_CONFIGS[*]}"
+    local config_args="$SHOES_CONF_FILE"
     if [[ "$SERVICE_MANAGER" == systemd ]]; then
         cat > "$WORK_DIR/service" <<EOF
 [Unit]
@@ -384,31 +366,26 @@ install_shoes() (
     if [[ -e "$SHOES_CONF_FILE" ]]; then
         check_installed || { error '安装不完整，请检查现有文件，或先卸载后再安装。'; return 1; }
         secure_config && repair_links || return 1
-        if [[ ! -s "$SS2022_CONF_FILE" || ! -s "$SS2022_LINK_FILE" ]]; then
-            add_ss2022
-            return $?
-        fi
         printf '已有配置，已保留端口与凭据。更新内核请选择 8；启动服务请选择 3。\n'
         return 0
     fi
-    if [[ -e "$SHOES_BIN" || -e "$SYSTEMD_FILE" || -e "$OPENRC_FILE" || -e "$SS2022_CONF_FILE" ]]; then
+    if [[ -e "$SHOES_BIN" || -e "$SYSTEMD_FILE" || -e "$OPENRC_FILE" ]]; then
         error '发现不完整的安装，请检查现有文件，或先通过菜单卸载后再安装。'
         return 1
     fi
     ensure_dependencies && begin_operation || return 1
     printf '开始安装 Shoes\n'
     download_shoes && get_public_ip && generate_credentials || return 1
-    write_config "$WORK_DIR/config.yaml" "$WORK_DIR" && write_ss2022_config "$WORK_DIR/ss2022.json" &&
-        validate_config "$CANDIDATE" "$WORK_DIR/config.yaml" "$WORK_DIR/ss2022.json" || return 1
+    write_config "$WORK_DIR/config.yaml" "$WORK_DIR" &&
+        validate_config "$CANDIDATE" "$WORK_DIR/config.yaml" || return 1
     install -d -m 700 "$SHOES_CONF_DIR" || return 1
     install -m 600 "$WORK_DIR/key.pem" "$WORK_DIR/cert.pem" "$SHOES_CONF_DIR/" || return 1
     write_config "$WORK_DIR/config.yaml" "$SHOES_CONF_DIR" &&
-        validate_config "$CANDIDATE" "$WORK_DIR/config.yaml" "$WORK_DIR/ss2022.json" || return 1
+        validate_config "$CANDIDATE" "$WORK_DIR/config.yaml" || return 1
     write_links "$WORK_DIR/config.txt" && write_ss2022_link "$WORK_DIR/ss2022.txt" || return 1
     install -m 600 "$WORK_DIR/config.yaml" "$SHOES_CONF_FILE" &&
         install -m 600 "$WORK_DIR/config.txt" "$SHOES_LINK_FILE" &&
-        atomic_private_file "$WORK_DIR/ss2022.json" "$SS2022_CONF_FILE" &&
-        atomic_private_file "$WORK_DIR/ss2022.txt" "$SS2022_LINK_FILE" &&
+        install -m 600 "$WORK_DIR/ss2022.txt" "$SS2022_LINK_FILE" &&
         mv -f "$CANDIDATE" "$SHOES_BIN" && install_service || return 1
     if [[ "$SERVICE_MANAGER" == systemd ]]; then systemctl enable shoes || return 1
     else rc-update add shoes default || return 1; fi
@@ -416,45 +393,6 @@ install_shoes() (
     printf 'Shoes 安装完成！\n'
     printf '请在云平台安全组及系统防火墙放行 TCP 端口 %s、%s、%s。\n' "$VLESS_PORT" "$ANYTLS_PORT" "$SS2022_PORT"
     cat "$SHOES_LINK_FILE" "$SS2022_LINK_FILE"
-)
-
-add_ss2022() (
-    check_installed || { error '请先安装 Shoes。'; return 1; }
-    ensure_dependencies && begin_operation && secure_config || return 1
-    local was_running=0 ports
-    local -a reserved_ports=()
-    check_running && was_running=1
-    if [[ -e "$SS2022_CONF_FILE" ]]; then
-        # An interrupted addition can be retried without regenerating the key.
-        validate_service_config "$SHOES_BIN" || return 1
-        if [[ ! -s "$SS2022_LINK_FILE" ]]; then
-            SS2022_PORT=$(jq -er '.[0].address | split(":") | last | tonumber' "$SS2022_CONF_FILE") &&
-                SS2022_PASSWORD=$(jq -er --arg method "$SS2022_METHOD" \
-                    '.[0].protocol | select(.type=="shadowsocks" and .cipher==$method) | .password' "$SS2022_CONF_FILE") || return 1
-            get_public_ip && write_ss2022_link "$WORK_DIR/ss2022.txt" &&
-                atomic_private_file "$WORK_DIR/ss2022.txt" "$SS2022_LINK_FILE" || return 1
-        fi
-        printf 'SS2022-128 已存在，保留原有端口与密钥。\n'
-    else
-        # Also reserve configured ports while the old service is stopped.
-        ports=$(awk '/^[[:space:]]*(-[[:space:]]*)?address:/ {
-            line=$0; sub(/#.*/, "", line); gsub(/[[:space:]"\047]/, "", line)
-            sub(/^.*:/, "", line); if (line ~ /^[0-9]+$/) print line
-        }' "$SHOES_CONF_FILE") || return 1
-        if [[ -n "$ports" ]]; then mapfile -t reserved_ports <<< "$ports"; fi
-        get_public_ip && generate_ss2022_credentials "${reserved_ports[@]}" &&
-            write_ss2022_config "$WORK_DIR/ss2022.json" &&
-            validate_config "$SHOES_BIN" "$SHOES_CONF_FILE" "$WORK_DIR/ss2022.json" &&
-            write_ss2022_link "$WORK_DIR/ss2022.txt" || return 1
-        atomic_private_file "$WORK_DIR/ss2022.json" "$SS2022_CONF_FILE" &&
-            atomic_private_file "$WORK_DIR/ss2022.txt" "$SS2022_LINK_FILE" || return 1
-        printf '请在云平台安全组及系统防火墙放行 TCP 端口 %s。\n' "$SS2022_PORT"
-    fi
-    install_service || return 1
-    if ((was_running)); then start_checked restart || return 1
-    else printf '服务保持停止状态，可选择 3 启动。\n'; fi
-    printf 'SS2022-128 配置完成。\n'
-    cat "$SS2022_LINK_FILE"
 )
 
 update_shoes() (
