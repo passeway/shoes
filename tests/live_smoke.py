@@ -65,7 +65,7 @@ jq -n --arg bin "$CANDIDATE" --arg pub "$PUBLIC_KEY" --arg sid "$SHID" --arg uui
         # Local TLS cover target removes third-party DNS/uptime from Reality tests.
         cover_port = free_port()
         cfg = (d / 'server.yaml').read_text().replace(
-            f'dest: "{p["sni"]}:443"', f'dest: "127.0.0.1:{cover_port}"')
+            f'dest: "{p["sni"]}:443"', f'dest: "localhost:{cover_port}"')
         (d / 'server.yaml').write_text(cfg)
         (d / 'probe').write_text('shoes-local-proxy-ok\n')
         handler = functools.partial(http.server.SimpleHTTPRequestHandler, directory=td)
