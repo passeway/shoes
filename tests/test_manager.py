@@ -1,4 +1,5 @@
 """Run isolated regression tests; no host service or installed binary is modified."""
+import base64
 import hashlib
 import io
 import json
@@ -9,7 +10,7 @@ import subprocess
 import tarfile
 import tempfile
 import unittest
-from urllib.parse import parse_qs, urlsplit
+from urllib.parse import parse_qs, unquote, urlsplit
 
 ROOT = Path(__file__).resolve().parents[1]
 FAKE_CORE = '''#!/bin/sh
@@ -18,7 +19,11 @@ case "$1" in
   generate-reality-keypair)
     echo 'REALITY private key: AAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAAA'
     echo 'REALITY public key: BBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBBB';;
-  --dry-run) [ "${FAIL_VALIDATION:-0}" != 1 ];;
+  --dry-run)
+    [ "${FAIL_VALIDATION:-0}" != 1 ] || exit 1
+    if [ "${FAIL_SS_VALIDATION:-0}" = 1 ]; then
+      for file in "$@"; do case "$file" in */ss2022.json) exit 1;; esac; done
+    fi;;
   *) exit 1;;
 esac
 '''
@@ -40,6 +45,8 @@ class ManagerTests(unittest.TestCase):
             'SHOES_BIN': self.bin, 'SHOES_CONF_DIR': self.conf,
             'SHOES_CONF_FILE': self.conf / 'config.yaml',
             'SHOES_LINK_FILE': self.conf / 'config.txt',
+            'SS2022_CONF_FILE': self.conf / 'ss2022.json',
+            'SS2022_LINK_FILE': self.conf / 'ss2022.txt',
             'SYSTEMD_FILE': self.d / 'units/shoes.service',
             'OPENRC_FILE': self.d / 'init/shoes', 'LOG_FILE': self.d / 'log',
             'LOCK_FILE': self.d / 'lock', 'STATE': self.d / 'state',
@@ -68,7 +75,7 @@ download_shoes(){
     cp "$FIXTURE_CORE" "$CANDIDATE" && chmod 755 "$CANDIDATE"
 }
 get_public_ip(){ HOST_IP=192.0.2.10; COUNTRY=ZZ; }
-choose_port(){ if [ -z "${1:-}" ]; then echo 40001; else echo 40002; fi; }
+choose_port(){ case "$#" in 0) echo 40001;; 1) echo 40002;; *) echo 40003;; esac; }
 '''
 
     def run_sh(self, body, install=False, stdin='', timeout=10):
@@ -84,7 +91,7 @@ choose_port(){ if [ -z "${1:-}" ]; then echo 40001; else echo 40002; fi; }
     def test_install_generates_private_config_and_complete_anytls_link(self):
         self.installed()
         self.assertEqual((self.conf.stat().st_mode & 0o777), 0o700)
-        for name in ('config.yaml', 'config.txt', 'key.pem', 'cert.pem'):
+        for name in ('config.yaml', 'config.txt', 'key.pem', 'cert.pem', 'ss2022.json', 'ss2022.txt'):
             self.assertEqual((self.conf / name).stat().st_mode & 0o777, 0o600)
         links = (self.conf / 'config.txt').read_text().splitlines()
         link = urlsplit(links[1]); query = parse_qs(link.query)
@@ -94,6 +101,100 @@ choose_port(){ if [ -z "${1:-}" ]; then echo 40001; else echo 40002; fi; }
         self.assertNotIn('allowInsecure', query)
         self.assertIn('password: "' + link.username + '"', (self.conf / 'config.yaml').read_text())
         self.assertEqual(list((self.d / 'bin').glob('.shoes-stage.*')), [])
+
+    def legacy_installation(self, stopped=False):
+        self.installed()
+        (self.conf / 'ss2022.json').unlink()
+        (self.conf / 'ss2022.txt').unlink()
+        if stopped:
+            (self.d / 'state/running').unlink()
+        return {p.name: p.read_bytes() for p in self.conf.iterdir()}
+
+    def test_ss2022_key_link_and_service_config(self):
+        self.installed()
+        config = json.loads((self.conf / 'ss2022.json').read_text())[0]
+        link = urlsplit((self.conf / 'ss2022.txt').read_text().strip())
+        self.assertEqual(config['protocol']['cipher'], '2022-blake3-aes-128-gcm')
+        self.assertEqual(len(base64.b64decode(config['protocol']['password'], validate=True)), 16)
+        self.assertEqual(unquote(link.username), config['protocol']['cipher'])
+        self.assertEqual(unquote(link.password), config['protocol']['password'])
+        self.assertEqual(link.port, 40003)
+        self.assertEqual(config['address'], '0.0.0.0:40003')
+        self.assertTrue(config['protocol']['udp_enabled'])
+        unit = (self.d / 'units/shoes.service').read_text()
+        for line in unit.splitlines():
+            if line.startswith(('ExecStart=', 'ExecStartPre=')):
+                self.assertIn(str(self.conf / 'config.yaml'), line)
+                self.assertIn(str(self.conf / 'ss2022.json'), line)
+        p = self.run_sh('show_links')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(len(p.stdout.splitlines()), 3)
+
+    def test_ss2022_link_percent_encodes_special_key_characters(self):
+        # A valid 16-byte key whose Base64 contains both + and /.
+        key = base64.b64encode(bytes.fromhex('fbffff') * 5 + b'\xff').decode()
+        p = self.run_sh('SS2022_PASSWORD=' + shlex.quote(key) + '; SS2022_PORT=40003; HOST_IP=192.0.2.10; COUNTRY=ZZ; '
+                        'write_ss2022_link "$STATE/link"; cat "$STATE/link"')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertIn('%2B', p.stdout)
+        self.assertIn('%2F', p.stdout)
+        self.assertIn('%3D', p.stdout)
+        self.assertEqual(unquote(urlsplit(p.stdout.strip()).password), key)
+
+    def test_add_ss2022_preserves_legacy_nodes(self):
+        before = self.legacy_installation()
+        p = self.run_sh('add_ss2022', install=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(before, {name: (self.conf / name).read_bytes() for name in before})
+        self.assertEqual((self.d / 'state/actions').read_text().splitlines(), ['start', 'restart'])
+        self.assertTrue((self.conf / 'ss2022.json').exists())
+
+    def test_add_ss2022_is_idempotent_and_repairs_missing_link(self):
+        self.installed()
+        before = {p.name: p.read_bytes() for p in self.conf.iterdir()}
+        p = self.run_sh('add_ss2022', install=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.conf.iterdir()})
+        (self.conf / 'ss2022.txt').unlink()
+        p = self.run_sh('add_ss2022', install=True)
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.conf.iterdir()})
+
+    def test_add_ss2022_to_stopped_installation_reserves_existing_ports(self):
+        before = self.legacy_installation(stopped=True)
+        p = self.run_sh(r'''
+get_public_ip(){ HOST_IP=192.0.2.10; COUNTRY=ZZ; }
+shuf(){ local n=0; [ ! -f "$STATE/port" ] || read -r n < "$STATE/port"; n=$((n+1)); echo "$n" > "$STATE/port"; echo $((40000+n)); }
+ss(){ :; }
+add_ss2022
+''')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(json.loads((self.conf / 'ss2022.json').read_text())[0]['address'], '0.0.0.0:40003')
+        self.assertFalse((self.d / 'state/running').exists())
+        self.assertEqual(before, {name: (self.conf / name).read_bytes() for name in before})
+
+    def test_bad_ss2022_config_does_not_change_existing_installation(self):
+        before = self.legacy_installation()
+        unit = (self.d / 'units/shoes.service').read_bytes()
+        p = self.run_sh('export FAIL_SS_VALIDATION=1; add_ss2022', install=True)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertEqual(before, {p.name: p.read_bytes() for p in self.conf.iterdir()})
+        self.assertEqual(unit, (self.d / 'units/shoes.service').read_bytes())
+        self.assertEqual((self.d / 'state/actions').read_text().splitlines(), ['start'])
+
+    def test_bad_ss2022_config_blocks_core_update(self):
+        self.installed()
+        self.bin.write_text(FAKE_CORE + '# original binary\n')
+        before = self.bin.read_bytes()
+        p = self.run_sh('export FAIL_SS_VALIDATION=1; update_shoes', install=True)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertEqual(before, self.bin.read_bytes())
+
+    def test_ss2022_restart_failure_is_reported(self):
+        self.legacy_installation()
+        p = self.run_sh('FAIL_START=1; add_ss2022', install=True)
+        self.assertNotEqual(p.returncode, 0)
+        self.assertNotIn('SS2022-128 配置完成', p.stdout)
 
     def test_reinstall_preserves_config_and_repairs_old_link(self):
         self.installed()
@@ -156,6 +257,7 @@ choose_port(){ if [ -z "${1:-}" ]; then echo 40001; else echo 40002; fi; }
         service = (self.d / 'init/shoes').read_text()
         self.assertIn('command_background="yes"', service)
         self.assertIn('--dry-run', service)
+        self.assertIn(str(self.conf / 'ss2022.json'), service)
         self.assertIn('checkpath -f -m 0600', service)
         self.assertEqual((self.d / 'state/rc-update').read_text().strip(), 'add shoes default')
         syntax = subprocess.run(['sh', '-n', str(self.d / 'init/shoes')], capture_output=True)
@@ -186,6 +288,15 @@ choose_port 40001
     def test_port_inspection_failure_aborts(self):
         p = self.run_sh('shuf(){ echo 40001; }; ss(){ return 1; }; choose_port')
         self.assertNotEqual(p.returncode, 0)
+
+    def test_port_selection_checks_udp_and_multiple_reservations(self):
+        p = self.run_sh(r'''
+shuf(){ local n=0; [ ! -f "$STATE/port" ] || read -r n < "$STATE/port"; n=$((n+1)); echo "$n" > "$STATE/port"; echo $((40000+n)); }
+ss(){ [[ "$*" == *-lntu* ]] || return 1; if [[ "$*" == *40003* ]]; then echo 'udp listener'; fi; }
+choose_port 40001 40002
+''')
+        self.assertEqual(p.returncode, 0, p.stderr)
+        self.assertEqual(p.stdout.strip(), '40004')
 
     def test_uninstall_cancel_and_failed_stop_keep_installation(self):
         self.installed()
