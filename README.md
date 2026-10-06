@@ -1,24 +1,78 @@
-## 终端预览
+<div align="center">
 
-![preview](image.png)
+# Shoes
 
-## 一键脚本
-```
+**轻量部署 · 双协议接入 · 简洁管理**
+
+基于 [cfal/shoes](https://github.com/cfal/shoes) 的 Linux 服务管理脚本。\
+一键部署 VLESS Reality Vision 与 AnyTLS，让安装、更新和日常维护更直接。
+
+![Linux](https://img.shields.io/badge/Linux-Debian%20%7C%20Ubuntu%20%7C%20Alpine-2563eb?style=flat-square)
+![Architecture](https://img.shields.io/badge/架构-x86__64%20%7C%20ARM64-0f766e?style=flat-square)
+![Protocols](https://img.shields.io/badge/协议-VLESS%20%7C%20AnyTLS-7c3aed?style=flat-square)
+
+</div>
+
+## 快速开始
+
+使用 **root** 用户执行：
+
+```bash
 bash <(curl -fsSL shoes-black-one.vercel.app)
 ```
-## Shoes — 轻量化、高性能的代理服务框架优势
 
-轻量化：单文件可执行程序，无额外依赖，部署极其简单
+精简系统如未安装 Bash 或 curl，先执行对应命令：
 
-高性能：基于 Rust 开发，低延迟、高并发、资源占用极低
+```bash
+# Debian / Ubuntu
+apt-get update && apt-get install -y bash curl ca-certificates
 
-跨平台：提供 GNU 与 MUSL 版本，可在多数 Linux 环境直接运行
+# Alpine
+apk add --no-cache bash curl ca-certificates
+```
 
-配置简洁：配置文件采用 YAML 格式，结构清晰，容易上手
+选择 `1` 完成安装，终端将显示两个节点的分享链接。请在云平台安全组及系统防火墙中放行提示的 **两个 TCP 端口**。
 
-稳定可靠：MUSL 静态版本不依赖 glibc，兼容旧系统，不会出现 GLIBC 错误
+## 协议与平台
 
-Shoes 是一个现代化、高性能的代理服务框架，旨在提供更快、更安全、更易扩展的网络传输体验
-得益于 Rust 语言的高性能和内存安全性，Shoes 能在极低资源消耗下运行并提供顶级的代理能力
+| 接入协议 | 部署方式 |
+| --- | --- |
+| VLESS | Reality + XTLS Vision |
+| AnyTLS | TLS，自签名证书；分享链接包含 `insecure=1` |
 
-## 项目地址：https://github.com/cfal/shoes
+| 系统 | 服务管理 | 架构 |
+| --- | --- | --- |
+| Debian / Ubuntu | systemd | x86_64 / ARM64 |
+| Alpine | OpenRC | x86_64 / ARM64 |
+
+需要正常运行对应服务管理器的 Linux 环境。脚本自动安装所需依赖；Debian / Ubuntu 优先尝试 GNU 内核，不兼容时使用 MUSL，Alpine 使用 MUSL。
+
+本脚本默认部署上表中的两个协议，Shoes 内核的更多能力可查阅[上游文档](https://github.com/cfal/shoes#readme)。
+
+## 日常管理
+
+| 选项 | 功能 |
+| --- | --- |
+| `1` | 安装服务；已有配置时保留端口和凭据 |
+| `2` | 确认后卸载服务 |
+| `3` / `4` / `5` | 启动 / 停止 / 重启 |
+| `6` | 查看分享链接，并修正旧 AnyTLS 链接参数 |
+| `7` | 查看日志，按 `Ctrl+C` 返回菜单 |
+| `8` | 更新内核，保留现有配置及服务启停状态 |
+| `0` | 退出 |
+
+更新前会检查下载文件、内核运行能力及现有配置。已运行的服务在更新后重启；原本停止的服务继续保持停止。启动失败时会显示日志，便于定位问题。
+
+## 客户端连接
+
+复制安装后显示的链接，导入支持对应协议的客户端。使用 v2rayN 导入 AnyTLS 时，请确认节点启用了“允许不安全连接”，以使用脚本生成的自签名证书。
+
+如果暂时无法连接，可先通过菜单检查运行状态和日志，再核对端口放行情况。公网 IPv4 自动获取失败时，脚本会提示手动输入，不会输出地址为空的节点。
+
+---
+
+<div align="center">
+
+[上游项目](https://github.com/cfal/shoes) · [版本发布](https://github.com/cfal/shoes/releases) · [反馈问题](https://github.com/passeway/shoes/issues)
+
+</div>
