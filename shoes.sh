@@ -384,7 +384,11 @@ install_shoes() (
     if [[ -e "$SHOES_CONF_FILE" ]]; then
         check_installed || { error '安装不完整，请检查现有文件，或先卸载后再安装。'; return 1; }
         secure_config && repair_links || return 1
-        printf '已有配置，已保留端口与凭据。更新内核请选择 8；启动服务请选择 3；添加 SS2022-128 请选择 9。\n'
+        if [[ ! -s "$SS2022_CONF_FILE" || ! -s "$SS2022_LINK_FILE" ]]; then
+            add_ss2022
+            return $?
+        fi
+        printf '已有配置，已保留端口与凭据。更新内核请选择 8；启动服务请选择 3。\n'
         return 0
     fi
     if [[ -e "$SHOES_BIN" || -e "$SYSTEMD_FILE" || -e "$OPENRC_FILE" || -e "$SS2022_CONF_FILE" ]]; then
@@ -522,7 +526,7 @@ show_menu() {
     printf '运行版本: %s\n\n' "$version"
     printf '%s\n' '1. 安装 Shoes 服务' '2. 卸载 Shoes 服务' '3. 启动 Shoes 服务' \
         '4. 停止 Shoes 服务' '5. 重启 Shoes 服务' '6. 查看 Shoes 配置' '7. 查看 Shoes 日志' \
-        '8. 更新 Shoes 内核' '9. 添加 SS2022-128' '0. 退出' '====================='
+        '8. 更新 Shoes 内核' '0. 退出' '====================='
 }
 
 main() {
@@ -541,7 +545,6 @@ main() {
             6) show_links ;;
             7) trap ':' INT; show_logs; trap - INT ;;
             8) update_shoes ;;
-            9) add_ss2022 ;;
             0) return 0 ;;
             *) printf '无效选项。\n' ;;
         esac

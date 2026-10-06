@@ -143,7 +143,7 @@ choose_port(){ case "$#" in 0) echo 40001;; 1) echo 40002;; *) echo 40003;; esac
 
     def test_add_ss2022_preserves_legacy_nodes(self):
         before = self.legacy_installation()
-        p = self.run_sh('add_ss2022', install=True)
+        p = self.run_sh('install_shoes', install=True)
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(before, {name: (self.conf / name).read_bytes() for name in before})
         self.assertEqual((self.d / 'state/actions').read_text().splitlines(), ['start', 'restart'])
@@ -156,7 +156,7 @@ choose_port(){ case "$#" in 0) echo 40001;; 1) echo 40002;; *) echo 40003;; esac
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.conf.iterdir()})
         (self.conf / 'ss2022.txt').unlink()
-        p = self.run_sh('add_ss2022', install=True)
+        p = self.run_sh('install_shoes', install=True)
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.conf.iterdir()})
 
@@ -166,7 +166,7 @@ choose_port(){ case "$#" in 0) echo 40001;; 1) echo 40002;; *) echo 40003;; esac
 get_public_ip(){ HOST_IP=192.0.2.10; COUNTRY=ZZ; }
 shuf(){ local n=0; [ ! -f "$STATE/port" ] || read -r n < "$STATE/port"; n=$((n+1)); echo "$n" > "$STATE/port"; echo $((40000+n)); }
 ss(){ :; }
-add_ss2022
+install_shoes
 ''')
         self.assertEqual(p.returncode, 0, p.stderr)
         self.assertEqual(json.loads((self.conf / 'ss2022.json').read_text())[0]['address'], '0.0.0.0:40003')
@@ -176,7 +176,7 @@ add_ss2022
     def test_bad_ss2022_config_does_not_change_existing_installation(self):
         before = self.legacy_installation()
         unit = (self.d / 'units/shoes.service').read_bytes()
-        p = self.run_sh('export FAIL_SS_VALIDATION=1; add_ss2022', install=True)
+        p = self.run_sh('export FAIL_SS_VALIDATION=1; install_shoes', install=True)
         self.assertNotEqual(p.returncode, 0)
         self.assertEqual(before, {p.name: p.read_bytes() for p in self.conf.iterdir()})
         self.assertEqual(unit, (self.d / 'units/shoes.service').read_bytes())
@@ -192,7 +192,7 @@ add_ss2022
 
     def test_ss2022_restart_failure_is_reported(self):
         self.legacy_installation()
-        p = self.run_sh('FAIL_START=1; add_ss2022', install=True)
+        p = self.run_sh('FAIL_START=1; install_shoes', install=True)
         self.assertNotEqual(p.returncode, 0)
         self.assertNotIn('SS2022-128 配置完成', p.stdout)
 
